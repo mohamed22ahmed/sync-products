@@ -26,16 +26,17 @@ class syncProducts extends Command
     /**
      * Execute the console command.
      */
-    public function handle(): int
+    public function handle(ProductSyncService $syncService): int
     {
         $this->info('Starting product synchronization...');
 
         try {
-
             $this->info("Batch size: " . $this->option('batch-size', 100));
 
             $this->info('Fetching products from API...');
+            $results = $syncService->syncAllProducts();
 
+            $this->displayResults($results);
 
             $this->info('Product synchronization completed successfully!');
 
@@ -47,5 +48,23 @@ class syncProducts extends Command
 
             return Command::FAILURE;
         }
+    }
+
+    /**
+     * Display the sync results in a formatted table
+     */
+    protected function displayResults(array $results): void
+    {
+        $this->newLine();
+        $this->info('Synchronization Results:');
+
+        $this->table(
+            ['Metric', 'Value'],
+            [
+                ['Total Products', count($results)],
+            ]
+        );
+
+        $this->newLine();
     }
 }
