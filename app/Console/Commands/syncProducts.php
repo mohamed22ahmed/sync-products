@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ProductSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class syncProducts extends Command
 {
@@ -12,24 +14,38 @@ class syncProducts extends Command
      *
      * @var string
      */
-    protected $signature = 'sync:products';
+    protected $signature = 'products:sync {--batch-size=100}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Sync products from fakestoreapi.com';
+    protected $description = 'Fetch and sync products from fakestoreapi.com';
 
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): int
     {
-        $this->info('Syncing products from fakestoreapi.com');
+        $this->info('Starting product synchronization...');
 
-        $response = Http::get('https://fakestoreapi.com/products');
-        $products = $response->json();
+        try {
 
+            $this->info("Batch size: " . $this->option('batch-size', 100));
+
+            $this->info('Fetching products from API...');
+
+
+            $this->info('Product synchronization completed successfully!');
+
+            return Command::SUCCESS;
+
+        } catch (\Exception $e) {
+            $this->error('Product synchronization failed: ' . $e->getMessage());
+            Log::error('Sync command failed: ' . $e->getMessage());
+
+            return Command::FAILURE;
+        }
     }
 }

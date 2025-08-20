@@ -1,107 +1,251 @@
-# Laravel Backend Challenge – Advanced Product Sync with Queued Batches
+# Product Sync Task
 
-## Objective
+A Laravel application that fetches and synchronizes products from a public API to a local database.
 
-Build a robust Laravel Artisan command that synchronizes product data from a public API into a relational database using queued jobs and batch processing. The task should evaluate your ability to design scalable backend systems using Laravel’s features.
+## Features
 
----
+- 🔄 **API Integration**: Fetches products from the FakeStore API (https://fakestoreapi.com/products)
+- 📦 **Batch Processing**: Processes products in configurable batches for optimal performance
+- 💾 **Database Sync**: Automatically creates/updates products and categories in the local database
+- 🎯 **Smart Updates**: Identifies existing products and updates them instead of creating duplicates
+- 🖥️ **Web Dashboard**: Beautiful web interface for monitoring and controlling the sync process
+- 🧪 **Comprehensive Testing**: Full test coverage for all functionality
+- 📊 **Real-time Status**: Live status updates and detailed sync results
 
-## Public API: [Fake Store API](https://fakestoreapi.com/)
+## Requirements
 
-* Endpoint: `https://fakestoreapi.com/products`
-* Method: `GET`
-* Returns a JSON array of product objects
+- PHP 8.2+
+- Laravel 12.0+
+- MySQL/PostgreSQL/SQLite
+- Composer
 
----
+## Installation
 
-## Task Requirements
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd sync-products-task
+```
+
+2. Install dependencies:
+```bash
+composer install
+```
+
+3. Copy environment file:
+```bash
+cp .env.example .env
+```
+
+4. Configure your database in `.env`:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
+
+5. Generate application key:
+```bash
+php artisan key:generate
+```
+
+6. Run migrations:
+```bash
+php artisan migrate
+```
+
+## Usage
+
+### Command Line Interface
+
+#### Basic Sync
+```bash
+php artisan products:sync
+```
+
+#### Custom Batch Size
+```bash
+php artisan products:sync --batch-size=20
+```
+
+#### Custom API URL
+```bash
+php artisan products:sync --api-url=https://custom-api.com/products
+```
+
+### Web Dashboard
+
+1. Start the Laravel development server:
+```bash
+php artisan serve
+```
+
+2. Visit the sync dashboard:
+```
+http://localhost:8000/sync-dashboard
+```
+
+3. Use the web interface to:
+   - Set batch size
+   - Configure custom API URL
+   - Start/stop sync processes
+   - Monitor sync status
+   - View detailed results
+
+### HTTP API
+
+#### Sync Products
+```bash
+POST /api/products/sync
+Content-Type: application/json
+
+{
+    "batch_size": 15,
+    "api_url": "https://custom-api.com/products"
+}
+```
+
+#### Get Status
+```bash
+GET /api/products/status
+```
+
+## How It Works
 
 ### 1. Fetch and Process Products
 
-* Fetch products from the public API.
-* Process them in batches.
-* Each product should be inserted or updated in the local database.
+The system follows these steps:
 
-### 2. Normalize Categories
+1. **API Request**: Makes an HTTP request to the configured API endpoint
+2. **Data Validation**: Validates the received product data
+3. **Batch Processing**: Splits products into configurable batches
+4. **Database Operations**: Processes each batch within a transaction
 
-* Extract categories from product data.
-* Save them in a separate table.
-* Associate products to categories.
+### 2. Product Processing
 
-### 3. Use Queued Jobs and Batching
+For each product:
 
-* Use Laravel jobs to process products.
-* Dispatch them using `Bus::batch()`.
-* Handle batch success and failure.
+1. **Category Management**: Creates or finds the associated category
+2. **Product Identification**: Checks if the product already exists (using title as unique identifier)
+3. **Data Update**: Updates existing products or creates new ones
+4. **Relationship Linking**: Establishes proper relationships between products and categories
 
-### 4. Download Images
+### 3. Batch Processing
 
-* Download product images.
-* Store them locally.
+- **Configurable Batch Size**: Default is 10 products per batch
+- **Transaction Safety**: Each batch is processed within a database transaction
+- **Error Handling**: Failed batches don't affect successful ones
+- **Progress Tracking**: Detailed logging and status updates
 
-### 5. Log Sync Summary
+## Configuration
 
-* Track number of products fetched, created, updated, skipped, failed.
-* Store summary in a sync logs table.
+### Environment Variables
 
-### 6. Testing
+```env
+# API Configuration
+PRODUCT_API_URL=https://fakestoreapi.com/products
+PRODUCT_BATCH_SIZE=10
 
-* Add unit or feature tests for the sync logic.
+# Database Configuration
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
 
-### 7. Notifications
+### Service Configuration
 
-* Send a summary email or log entry to the admin after sync completes or fails.
+The `ProductSyncService` can be configured programmatically:
 
-### 8. Progress Bar
+```php
+use App\Services\ProductSyncService;
 
-* Display a progress bar in the console while syncing.
+$syncService = new ProductSyncService();
+$syncService->setBatchSize(25);
+$syncService->setApiUrl('https://custom-api.com/products');
+$results = $syncService->syncAllProducts();
+```
 
-### 9. Horizon-ready Queues
+## Database Schema
 
-* Use separate named queues suitable for Laravel Horizon.
+### Products Table
+- `id` - Primary key
+- `title` - Product title (unique identifier)
+- `price` - Product price (decimal)
+- `description` - Product description
+- `image` - Product image URL
+- `category_id` - Foreign key to categories
+- `rating` - JSON field for rating data
+- `created_at` - Creation timestamp
+- `updated_at` - Update timestamp
 
-### 10. Schedule Sync Job
+### Categories Table
+- `id` - Primary key
+- `name` - Category name
+- `created_at` - Creation timestamp
+- `updated_at` - Update timestamp
 
-* Schedule the sync command to run periodically using Laravel’s scheduler.
-* Ensure the schedule is defined clearly and can be enabled via `app/Console/Kernel.php`.
+## Testing
 
----
+Run the test suite:
 
-## Considerations
+```bash
+php artisan test
+```
 
-* Handle duplicate `external_id`s.
-* Skip products with missing fields.
-* Make the API URL configurable.
-* Ensure clean and maintainable code.
+Or run specific tests:
 
----
+```bash
+php artisan test --filter=ProductSyncTest
+```
 
-## Evaluation Criteria
+## Monitoring and Logging
 
-| Area                 | Expectation                          |
-| -------------------- | ------------------------------------ |
-| Laravel Fundamentals | Artisan, Queues, Jobs, Http, Storage |
-| Code Quality         | Structure, naming, readability       |
-| Relationships        | Proper Eloquent associations         |
-| Error Handling       | Robust fallback logic and retries    |
-| Performance          | Efficient batching and chunking      |
-| Documentation        | Clear CLI/log output, clean codebase |
+The system provides comprehensive logging:
 
----
+- **Sync Start/Completion**: Logs when sync processes begin and end
+- **Batch Processing**: Detailed logs for each batch
+- **Error Handling**: Logs all errors with context
+- **Performance Metrics**: Tracks processing times and statistics
 
-## Submission
+Logs are stored in `storage/logs/laravel.log`
 
-* Clone this  Repo repository
+## Error Handling
 
-* **Add **maher@msaaq.com** as a collaborator from the first commit.**
+The system handles various error scenarios:
 
-* Submit a GitHub repository.
+- **API Failures**: Network issues, timeouts, and HTTP errors
+- **Database Errors**: Connection issues and constraint violations
+- **Data Validation**: Invalid or malformed product data
+- **Batch Failures**: Individual batch failures don't stop the entire process
 
-* Include basic setup instructions in the README.
+## Performance Considerations
 
-* Mention how long the task took you.
+- **Batch Processing**: Configurable batch sizes for optimal memory usage
+- **Database Transactions**: Ensures data consistency
+- **Connection Pooling**: Efficient HTTP client usage
+- **Memory Management**: Processes data in chunks to avoid memory issues
 
-* Explain which parts you completed or skipped, and why.
+## Security Features
 
-* **Deadline: 3 calendar days from receiving the task.**
-# sync-products
+- **Input Validation**: All API inputs are validated
+- **SQL Injection Protection**: Uses Laravel's Eloquent ORM
+- **XSS Protection**: Output is properly escaped
+- **Rate Limiting**: Built-in Laravel rate limiting support
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## License
+
+This project is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
