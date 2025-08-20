@@ -31,6 +31,10 @@ class syncProducts extends Command
         $this->info('Starting product synchronization...');
 
         try {
+            if ($this->option('batch-size')) {
+                $syncService->setBatchSize((int) $this->option('batch-size'));
+            }
+
             $this->info("Batch size: " . $this->option('batch-size', 100));
 
             $this->info('Fetching products from API...');
@@ -61,7 +65,11 @@ class syncProducts extends Command
         $this->table(
             ['Metric', 'Value'],
             [
-                ['Total Products', count($results)],
+                ['Total Products', $results['total_products']],
+                ['Total Batches', $results['total_batches']],
+                ['Products Created', $results['created']],
+                ['Products Updated', $results['updated']],
+                ['Errors', $results['errors']],
             ]
         );
 
