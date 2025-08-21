@@ -1,0 +1,42 @@
+# Mail Configuration for Product Sync System
+# Add these lines to your .env file
+
+# Basic Mail Settings
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=hammam111998@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=hammam111998@gmail.com
+MAIL_FROM_NAME="${APP_NAME}"
+
+# Custom Mail Settings
+ADMIN_EMAIL=hammam111998@gmail.com
+ADMIN_NAME=Admin
+COMPANY_NAME="Product Sync System"
+EMAIL_SUBJECT_PREFIX=🔄
+ENABLE_SYNC_EMAILS=true
+EMAIL_TEMPLATE=emails.sync-logs
+SEND_ON_SUCCESS=true
+SEND_ON_FAILURE=true
+INCLUDE_BATCH_DETAILS=true
+EMAIL_FREQUENCY=immediate
+TIMEZONE=UTC
+
+# Alternative Mail Services
+
+# For Mailgun:
+# MAIL_MAILER=mailgun
+# MAILGUN_DOMAIN=your-domain.com
+# MAILGUN_SECRET=your-secret-key
+
+# For AWS SES:
+# MAIL_MAILER=ses
+# AWS_ACCESS_KEY_ID=your-key
+# AWS_SECRET_ACCESS_KEY=your-secret
+# AWS_DEFAULT_REGION=us-east-1
+
+# For Postmark:
+# MAIL_MAILER=postmark
+# POSTMARK_TOKEN=your-token

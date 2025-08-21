@@ -8,7 +8,12 @@ use Illuminate\Support\Facades\Log;
 class SyncLogService
 {
     protected $currentLog = null;
+    protected $mailService;
 
+    public function __construct(MailService $mailService)
+    {
+        $this->mailService = $mailService;
+    }
 
     public function startSync(string $syncType, array $options = []): SyncLog
     {
@@ -17,6 +22,12 @@ class SyncLogService
             'status' => 'started',
             'started_at' => now(),
             'sync_options' => $options
+        ]);
+
+        Log::info("Sync started", [
+            'sync_id' => $this->currentLog->id,
+            'sync_type' => $syncType,
+            'options' => $options
         ]);
 
         return $this->currentLog;
@@ -29,6 +40,11 @@ class SyncLogService
         }
 
         $this->currentLog->update($stats);
+
+        Log::info("Sync stats updated", [
+            'sync_id' => $this->currentLog->id,
+            'stats' => $stats
+        ]);
     }
 
     public function completeSync(array $finalStats = []): void
@@ -45,7 +61,15 @@ class SyncLogService
             'duration_seconds' => $duration,
             ...$finalStats
         ]);
-        
+
+        Log::info("Sync completed successfully", [
+            'sync_id' => $this->currentLog->id,
+            'duration' => $duration,
+            'final_stats' => $finalStats
+        ]);
+
+        // Send completion email
+        $this->mailService->sendSyncLogEmail($this->currentLog);
     }
 
     public function failSync(string $errorMessage, array $currentStats = []): void
@@ -63,7 +87,16 @@ class SyncLogService
             'duration_seconds' => $duration,
             ...$currentStats
         ]);
-        
+
+        Log::info("Sync failed", [
+            'sync_id' => $this->currentLog->id,
+            'error' => $errorMessage,
+            'duration' => $duration,
+            'stats' => $currentStats
+        ]);
+
+        // Send failure email
+        $this->mailService->sendSyncLogEmail($this->currentLog);
     }
 
     public function getCurrentLog(): ?SyncLog
