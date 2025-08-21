@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\MailService;
 use Tests\TestCase;
 use App\Services\ProductSyncService;
 use App\Services\SyncLogService;
@@ -72,7 +73,7 @@ class ProgressBarTest extends TestCase
 
     public function test_sync_log_service_integration_with_progress()
     {
-        $syncLogService = new SyncLogService();
+        $syncLogService = new SyncLogService(new MailService());
         
         // Start sync
         $syncLog = $syncLogService->startSync('test_sync');

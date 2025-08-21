@@ -12,7 +12,19 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (Schedule $schedule) {
-        $schedule->command('products:sync --batch-size=100')->daily();
+        // Daily sync at 2:00 AM
+        $schedule->command('products:sync --batch-size=100')
+            ->daily()
+            ->at('02:00')
+            ->description('Daily product synchronization from API')
+            ->withoutOverlapping()
+            ->runInBackground()
+            ->onSuccess(function () {
+                \Illuminate\Support\Facades\Log::info('Scheduled product sync completed successfully');
+            })
+            ->onFailure(function () {
+                \Illuminate\Support\Facades\Log::error('Scheduled product sync failed');
+            });
     })
     ->withMiddleware(function (Middleware $middleware): void {
         //
