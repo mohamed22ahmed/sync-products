@@ -74,10 +74,9 @@ class ImageDownloadService
     {
         $cleanTitle = Str::slug($productTitle, '_');
         $extension = $this->getExtensionFromUrl($imageUrl);
-        $timestamp = now()->format('Y_m_d_H_i_s');
         $cleanTitle = substr($cleanTitle, 0, 50);
         
-        return "{$cleanTitle}_{$timestamp}.{$extension}";
+        return "{$cleanTitle}.{$extension}";
     }
 
     protected function getExtensionFromUrl(string $url): string
