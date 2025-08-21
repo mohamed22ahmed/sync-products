@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Models\Category;
+use App\Services\ImageDownloadService;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -23,14 +24,14 @@ class ProcessProductJob implements ShouldQueue
         $this->productData = $productData;
     }
 
-    public function handle(): void
+    public function handle(ImageDownloadService $imageService): void
     {
         try {
             if ($this->batch() && $this->batch()->cancelled()) {
                 return;
             }
 
-            $result = $this->processProduct();
+            $result = $this->processProduct($imageService);
 
             Log::info("Product processed successfully", [
                 'product_id' => $this->productData['id'] ?? 'unknown',
@@ -49,15 +50,16 @@ class ProcessProductJob implements ShouldQueue
         }
     }
 
-    protected function processProduct(): string
+    protected function processProduct(ImageDownloadService $imageService): string
     {
         $category = $this->findOrCreateCategory($this->productData['category']);
+        $localImagePath = null;
 
         $productAttributes = [
             'title' => $this->productData['title'],
             'price' => $this->productData['price'],
             'description' => $this->productData['description'],
-            'image' => $this->productData['image'],
+            'image' => $localImagePath,
             'category_id' => $category->id,
             'rating' => json_encode($this->productData['rating']),
         ];
@@ -68,6 +70,24 @@ class ProcessProductJob implements ShouldQueue
             $existingProduct->update($productAttributes);
             return 'updated';
         } else {
+            if (!empty($this->productData['image'])) {
+                try {
+                    $localImagePath = $imageService->downloadAndStore(
+                        $this->productData['image'],
+                        $this->productData['title']
+                    );
+                } catch (\Exception $e) {
+                    Log::error("Error downloading image", [
+                        'product_title' => $this->productData['title'],
+                        'image_url' => $this->productData['image'],
+                        'error' => $e->getMessage()
+                    ]);
+                    $localImagePath = $this->productData['image'];
+                }
+            } else {
+                $localImagePath = $this->productData['image'];
+            }
+            
             Product::create($productAttributes);
             return 'created';
         }
