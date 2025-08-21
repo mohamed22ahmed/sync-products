@@ -23,7 +23,15 @@ class syncProducts extends Command
 
             $this->info("Batch size: " . $this->option('batch-size', 100));
             $this->info('Using queued jobs with Bus::batch() for processing...');
+            
+            $this->info('Fetching products from API...');
+            $progressBar = $this->output->createProgressBar();
+            $progressBar->start();
+            
             $results = $syncService->syncAllProducts();
+            
+            $progressBar->finish();
+            $this->newLine(2);
             
             if (isset($results['batch_id'])) {
                 $this->info("Batch dispatched successfully!");
@@ -32,9 +40,7 @@ class syncProducts extends Command
                 $this->info("Total Batches: {$results['total_batches']}");
                 $this->info("Status: {$results['message']}");
                 
-                $this->newLine();
-                $this->info('To monitor batch progress, use:');
-                $this->info("php artisan queue:work --queue=products");
+                $this->showProgressMonitoring($results['batch_id'], $syncService);
             }
 
             $this->info('Product synchronization completed successfully!');
@@ -49,22 +55,62 @@ class syncProducts extends Command
         }
     }
 
-    protected function displayResults(array $results): void
+    protected function showProgressMonitoring(string $batchId, ProductSyncService $syncService): void
     {
+        $this->info('Monitoring sync progress...');
         $this->newLine();
-        $this->info('Synchronization Results:');
-
-        $this->table(
-            ['Metric', 'Value'],
-            [
-                ['Total Products', $results['total_products']],
-                ['Total Batches', $results['total_batches']],
-                ['Products Created', $results['created']],
-                ['Products Updated', $results['updated']],
-                ['Errors', $results['errors']],
-            ]
-        );
-
-        $this->newLine();
+        
+        $progressBar = $this->output->createProgressBar(100);
+        $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s% %memory:6s%');
+        $progressBar->start();
+        
+        $lastProgress = 0;
+        $attempts = 0;
+        $maxAttempts = 30;
+        
+        while ($attempts < $maxAttempts) {
+            $batchStatus = $syncService->getBatchStatus($batchId);
+            
+            if (!$batchStatus) {
+                $progressBar->advance(100 - $lastProgress);
+                break;
+            }
+            
+            if ($batchStatus['finished']) {
+                $progressBar->advance(100 - $lastProgress);
+                break;
+            }
+            
+            $currentProgress = $batchStatus['progress_percentage'];
+            $progressToAdvance = $currentProgress - $lastProgress;
+            
+            if ($progressToAdvance > 0) {
+                $progressBar->advance($progressToAdvance);
+                $lastProgress = $currentProgress;
+            }
+            
+            $attempts++;
+            sleep(2);
+        }
+        
+        $progressBar->finish();
+        $this->newLine(2);
+        
+        $finalStatus = $syncService->getBatchStatus($batchId);
+        if ($finalStatus) {
+            $this->info("Final Status:");
+            $this->info("Total Jobs: {$finalStatus['total_jobs']}");
+            $this->info("Pending Jobs: {$finalStatus['pending_jobs']}");
+            $this->info("Failed Jobs: {$finalStatus['failed_jobs']}");
+            $this->info("Progress: {$finalStatus['progress_percentage']}%");
+            
+            if ($finalStatus['finished']) {
+                $this->info("Status: Completed");
+            } elseif ($finalStatus['cancelled']) {
+                $this->warn("Status: Cancelled");
+            } else {
+                $this->info("Status: In Progress");
+            }
+        }
     }
 }

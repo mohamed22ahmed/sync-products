@@ -32,6 +32,16 @@ class ProcessProductJob implements ShouldQueue
                 return;
             }
 
+            // Log job start for progress tracking
+            if ($this->batch()) {
+                Log::info("Processing job in batch", [
+                    'batch_id' => $this->batch()->id,
+                    'job_number' => $this->batch()->processedJobs() + 1,
+                    'total_jobs' => $this->batch()->totalJobs,
+                    'product_title' => $this->productData['title']
+                ]);
+            }
+
             $result = $this->processProduct($imageService);
 
             // Update sync log with product result
@@ -40,14 +50,16 @@ class ProcessProductJob implements ShouldQueue
             Log::info("Product processed successfully", [
                 'product_id' => $this->productData['id'] ?? 'unknown',
                 'title' => $this->productData['title'],
-                'result' => $result
+                'result' => $result,
+                'batch_progress' => $this->batch() ? $this->batch()->progress() : 'N/A'
             ]);
 
         } catch (\Exception $e) {
             Log::error("Failed to process product", [
                 'product_id' => $this->productData['id'] ?? 'unknown',
                 'title' => $this->productData['title'],
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'batch_progress' => $this->batch() ? $this->batch()->progress() : 'N/A'
             ]);
 
             // Update sync log with failure
