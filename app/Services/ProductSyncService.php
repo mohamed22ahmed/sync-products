@@ -13,31 +13,63 @@ class ProductSyncService
 {
     protected $apiUrl = 'https://fakestoreapi.com/products';
     protected $batchSize = 100;
+    protected $syncLogService;
+
+    public function __construct(SyncLogService $syncLogService)
+    {
+        $this->syncLogService = $syncLogService;
+    }
 
     public function syncAllProducts(): array
     {
         try {
-            Log::info('Starting product sync from API');
+            // Start sync logging
+            $syncLog = $this->syncLogService->startSync('full_sync', [
+                'batch_size' => $this->batchSize,
+                'api_url' => $this->apiUrl
+            ]);
 
-            $response = Http::timeout(30)->get($this->apiUrl);
+            Log::info("Starting product synchronization", [
+                'batch_size' => $this->batchSize,
+                'api_url' => $this->apiUrl
+            ]);
 
-            if (!$response->successful()) {
-                throw new \Exception('Failed to fetch products from API: ' . $response->status());
-            }
+            // Fetch products from API
+            $products = $this->fetchProductsFromApi();
+            
+            // Update sync log with fetched count
+            $this->syncLogService->updateStats([
+                'total_products_fetched' => count($products)
+            ]);
 
-            $products = $response->json();
-            $totalProducts = count($products);
+            Log::info("Fetched " . count($products) . " products from API");
 
-            Log::info("Fetched {$totalProducts} products from API");
-
+            // Process products using queued jobs
             $results = $this->processProductsWithQueuedJobs($products);
 
-            Log::info('Product sync completed', $results);
+            // Update sync log with batch info
+            $this->syncLogService->updateStats([
+                'total_batches' => $results['total_batches'],
+                'batch_id' => $results['batch_id']
+            ]);
+
+            // Complete sync log
+            $this->syncLogService->completeSync([
+                'total_products_fetched' => count($products),
+                'total_batches' => $results['total_batches']
+            ]);
 
             return $results;
 
         } catch (\Exception $e) {
-            Log::error('Product sync failed: ' . $e->getMessage());
+            Log::error("Product synchronization failed: " . $e->getMessage());
+            
+            // Log sync failure
+            $this->syncLogService->failSync($e->getMessage(), [
+                'total_products_fetched' => 0,
+                'total_batches' => 0
+            ]);
+
             throw $e;
         }
     }
@@ -57,24 +89,13 @@ class ProductSyncService
             ->name('Product Sync - ' . now()->format('Y-m-d H:i:s'))
             ->onQueue('products')
             ->then(function ($batch) {
-                Log::info('Product sync batch completed successfully', [
-                    'batch_id' => $batch->id,
-                    'total_jobs' => $batch->totalJobs,
-                    'pending_jobs' => $batch->pendingJobs,
-                    'failed_jobs' => $batch->failedJobs
-                ]);
+                $this->handleBatchSuccess($batch);
             })
             ->catch(function ($batch, $e) {
-                Log::error('Product sync batch failed', [
-                    'batch_id' => $batch->id,
-                    'error' => $e->getMessage()
-                ]);
+                $this->handleBatchFailure($batch, $e);
             })
             ->finally(function ($batch) {
-                Log::info('Product sync batch finished', [
-                    'batch_id' => $batch->id,
-                    'progress_percentage' => $batch->progress()
-                ]);
+                $this->handleBatchCompletion($batch);
             })
             ->dispatch();
 
@@ -88,8 +109,42 @@ class ProductSyncService
             'total_batches' => $totalBatches,
             'batch_id' => $batch->id,
             'status' => 'dispatched',
-            'message' => 'Products are being processed in the background with image downloads'
+            'message' => 'Products are being processed in the background'
         ];
+    }
+
+    protected function handleBatchSuccess($batch): void
+    {
+        Log::info('Product sync batch completed successfully', [
+            'batch_id' => $batch->id,
+            'total_jobs' => $batch->totalJobs,
+            'pending_jobs' => $batch->pendingJobs,
+            'failed_jobs' => $batch->failedJobs
+        ]);
+
+        // Update sync log with final stats
+        $this->syncLogService->updateStats([
+            'products_failed' => $batch->failedJobs
+        ]);
+    }
+
+    protected function handleBatchFailure($batch, $e): void
+    {
+        Log::error('Product sync batch failed', [
+            'batch_id' => $batch->id,
+            'error' => $e->getMessage()
+        ]);
+
+        // Update sync log with failure
+        $this->syncLogService->failSync($e->getMessage());
+    }
+
+    protected function handleBatchCompletion($batch): void
+    {
+        Log::info('Product sync batch finished', [
+            'batch_id' => $batch->id,
+            'progress_percentage' => $batch->progress()
+        ]);
     }
 
     protected function findOrCreateCategory(string $categoryName): Category
@@ -104,5 +159,59 @@ class ProductSyncService
     {
         $this->batchSize = $size;
         return $this;
+    }
+
+    public function setApiUrl(string $url): self
+    {
+        $this->apiUrl = $url;
+        return $this;
+    }
+
+    public function getBatchSize(): int
+    {
+        return $this->batchSize;
+    }
+
+    public function getApiUrl(): string
+    {
+        return $this->apiUrl;
+    }
+
+    public function fetchProductsFromApi(): array
+    {
+        $response = Http::timeout(30)->get($this->apiUrl);
+
+        if (!$response->successful()) {
+            throw new \Exception('Failed to fetch products from API: ' . $response->status());
+        }
+
+        return $response->json();
+    }
+
+    public function getBatchStatus(string $batchId): ?array
+    {
+        try {
+            $batch = Bus::findBatch($batchId);
+
+            if (!$batch) {
+                return null;
+            }
+
+            return [
+                'id' => $batch->id,
+                'name' => $batch->name,
+                'total_jobs' => $batch->totalJobs,
+                'pending_jobs' => $batch->pendingJobs,
+                'failed_jobs' => $batch->failedJobs,
+                'progress_percentage' => $batch->progress(),
+                'finished' => $batch->finished(),
+                'cancelled' => $batch->cancelled(),
+                'created_at' => $batch->createdAt,
+                'finished_at' => $batch->finishedAt
+            ];
+        } catch (\Exception $e) {
+            Log::error("Failed to get batch status", ['batch_id' => $batchId, 'error' => $e->getMessage()]);
+            return null;
+        }
     }
 }

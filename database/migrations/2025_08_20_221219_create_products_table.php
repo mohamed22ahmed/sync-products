@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('title');
             $table->decimal('price', 10, 2);
             $table->string('description');
-            $table->string('image');
+            $table->string('image')->nullable();
             $table->unsignedBigInteger('category_id');
             $table->json('rating');
             $table->timestamps();

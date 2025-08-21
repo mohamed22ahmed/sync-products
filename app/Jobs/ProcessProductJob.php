@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Product;
 use App\Models\Category;
 use App\Services\ImageDownloadService;
+use App\Services\SyncLogService;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,7 +25,7 @@ class ProcessProductJob implements ShouldQueue
         $this->productData = $productData;
     }
 
-    public function handle(ImageDownloadService $imageService): void
+    public function handle(ImageDownloadService $imageService, SyncLogService $syncLogService): void
     {
         try {
             if ($this->batch() && $this->batch()->cancelled()) {
@@ -32,6 +33,9 @@ class ProcessProductJob implements ShouldQueue
             }
 
             $result = $this->processProduct($imageService);
+
+            // Update sync log with product result
+            $this->updateSyncLogStats($syncLogService, $result);
 
             Log::info("Product processed successfully", [
                 'product_id' => $this->productData['id'] ?? 'unknown',
@@ -46,6 +50,9 @@ class ProcessProductJob implements ShouldQueue
                 'error' => $e->getMessage()
             ]);
 
+            // Update sync log with failure
+            $this->updateSyncLogStats($syncLogService, 'failed');
+
             throw $e;
         }
     }
@@ -53,7 +60,23 @@ class ProcessProductJob implements ShouldQueue
     protected function processProduct(ImageDownloadService $imageService): string
     {
         $category = $this->findOrCreateCategory($this->productData['category']);
-        $localImagePath = null;
+
+        $localImagePath = $this->productData['image'] ?? '';
+        if (!empty($this->productData['image'])) {
+            try {
+                $localImagePath = $imageService->downloadAndStore(
+                    $this->productData['image'],
+                    $this->productData['title']
+                );
+            } catch (\Exception $e) {
+                Log::error("Error downloading image", [
+                    'product_title' => $this->productData['title'],
+                    'image_url' => $this->productData['image'],
+                    'error' => $e->getMessage()
+                ]);
+                $localImagePath = $this->productData['image'];
+            }
+        }
 
         $productAttributes = [
             'title' => $this->productData['title'],
@@ -70,24 +93,6 @@ class ProcessProductJob implements ShouldQueue
             $existingProduct->update($productAttributes);
             return 'updated';
         } else {
-            if (!empty($this->productData['image'])) {
-                try {
-                    $localImagePath = $imageService->downloadAndStore(
-                        $this->productData['image'],
-                        $this->productData['title']
-                    );
-                } catch (\Exception $e) {
-                    Log::error("Error downloading image", [
-                        'product_title' => $this->productData['title'],
-                        'image_url' => $this->productData['image'],
-                        'error' => $e->getMessage()
-                    ]);
-                    $localImagePath = $this->productData['image'];
-                }
-            } else {
-                $localImagePath = $this->productData['image'];
-            }
-            
             Product::create($productAttributes);
             return 'created';
         }
@@ -99,5 +104,34 @@ class ProcessProductJob implements ShouldQueue
             ['name' => $categoryName],
             ['name' => $categoryName]
         );
+    }
+
+    protected function updateSyncLogStats(SyncLogService $syncLogService, string $result): void
+    {
+        try {
+            $stats = [];
+            
+            switch ($result) {
+                case 'created':
+                    $stats['products_created'] = 1;
+                    break;
+                case 'updated':
+                    $stats['products_updated'] = 1;
+                    break;
+                case 'failed':
+                    $stats['products_failed'] = 1;
+                    break;
+                default:
+                    $stats['products_skipped'] = 1;
+                    break;
+            }
+
+            $syncLogService->updateStats($stats);
+        } catch (\Exception $e) {
+            Log::warning("Failed to update sync log stats", [
+                'result' => $result,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }
