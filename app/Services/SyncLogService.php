@@ -9,6 +9,7 @@ class SyncLogService
 {
     protected $currentLog = null;
 
+
     public function startSync(string $syncType, array $options = []): SyncLog
     {
         $this->currentLog = SyncLog::create([
@@ -16,12 +17,6 @@ class SyncLogService
             'status' => 'started',
             'started_at' => now(),
             'sync_options' => $options
-        ]);
-
-        Log::info("Sync started", [
-            'sync_id' => $this->currentLog->id,
-            'sync_type' => $syncType,
-            'options' => $options
         ]);
 
         return $this->currentLog;
@@ -34,11 +29,6 @@ class SyncLogService
         }
 
         $this->currentLog->update($stats);
-
-        Log::info("Sync stats updated", [
-            'sync_id' => $this->currentLog->id,
-            'stats' => $stats
-        ]);
     }
 
     public function completeSync(array $finalStats = []): void
@@ -55,12 +45,7 @@ class SyncLogService
             'duration_seconds' => $duration,
             ...$finalStats
         ]);
-
-        Log::info("Sync completed successfully", [
-            'sync_id' => $this->currentLog->id,
-            'duration' => $duration,
-            'final_stats' => $finalStats
-        ]);
+        
     }
 
     public function failSync(string $errorMessage, array $currentStats = []): void
@@ -78,13 +63,7 @@ class SyncLogService
             'duration_seconds' => $duration,
             ...$currentStats
         ]);
-
-        Log::error("Sync failed", [
-            'sync_id' => $this->currentLog->id,
-            'error' => $errorMessage,
-            'duration' => $duration,
-            'stats' => $currentStats
-        ]);
+        
     }
 
     public function getCurrentLog(): ?SyncLog
